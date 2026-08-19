@@ -5,8 +5,6 @@ The model never builds an \(r^2\) table. Instead it adds two learned, symmetric
 biases to the attention logits — genomic distance and genotype context — and
 lets the transformer recover LD-like structure from data.
 
-Prepared for an [ECCB 2026](https://eccb2026.org/) poster
-(Omar Abdelwahab, supervisor Davoud Torkamaneh, Université Laval).
 
 ```
 softmax(QKᵀ / √d + B_distance + B_genotype)
@@ -197,33 +195,10 @@ scripts/
   strong_baseline_pass.py    saturated explicit-LD on saved splits
   make_poster_figures.py     poster/fig_*.png from results_large/
   render_poster_pdf.py       print PDF
-  check_poster.py            gates the poster build
-poster/                      ECCB 2026 poster + talk
 tests/                       symmetry / shape / metric invariants
 ```
 
----
 
-## What this does and does not claim
-
-- **Does claim:** higher held-out accuracy than both a usual top-8 \(r^2\)
-  pipeline and a fully-tuned all-partner control, on identical masked entries,
-  with a paired Wilcoxon test; recovery of true LD structure without ever
-  seeing \(r^2\); better sample efficiency at small cohorts; no stored
-  \(L \times L\) artifact and no per-cohort preprocessing stage.
-- **Does not claim** that the LD bias raises the accuracy *ceiling*. With a
-  large cohort a plain transformer catches up (98.9% vs 98.9% at 1,000 people).
-  The practical edge is vs the explicit-\(r^2\) pipeline and at smaller \(N\).
-- **Does not claim** that it is faster than computing \(r^2\). \(r^2\) is a
-  cheap one-off per cohort; the bias is recomputed every batch. The saving is
-  structural (no matrix to store or rebuild), not wall-clock.
-- **Does not claim** that Pearson \(r = 0.56\) is dosage \(r^2\). See the
-  glossary above.
-
-More detail on failed benchmarks, positional encodings, and control strength
-is in [`poster/IMPROVEMENTS.md`](poster/IMPROVEMENTS.md).
-
----
 
 ## License
 
