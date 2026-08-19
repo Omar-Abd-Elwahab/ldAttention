@@ -9,7 +9,7 @@ an artifact of a weak opponent.
 The control does not depend on the trained model, and the split and the
 evaluation masks are fully determined by the seed, so the fair version can be
 recomputed on the *identical* masked entries without retraining anything. That
-is what this does. The poster then reports both: the sparse pipeline as it is
+is what this does. Results then include both: the sparse pipeline as it is
 usually run, and this saturated version as the strongest linear control the
 benchmark admits.
 

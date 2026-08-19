@@ -26,3 +26,15 @@ results_stale_backup/
 
 # Local toolchains (portable git / gh)
 .tools/
+
+# Conference poster / talk — kept locally, not part of this repository
+poster/
+abstract_eccb.docx
+abstract_eccb_omar.docx
+scripts/poster_layout.py
+scripts/make_poster_figures.py
+scripts/build_poster.py
+scripts/render_poster_pdf.py
+scripts/make_script.py
+scripts/check_poster.py
+scripts/make_mock_results.py

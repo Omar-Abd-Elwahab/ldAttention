@@ -1,6 +1,6 @@
 """Is the explicit-LD control a fair opponent, or a strawman?
 
-The poster's central claim is measured against a per-site regression on each
+The central claim is measured against a per-site regression on each
 site's top-``k`` LD partners. ``k`` was set to 8 without justification, which is
 the first thing a reviewer should attack: a baseline can always be beaten by
 starving it. This sweeps ``k`` and the baseline's training budget on the exact
