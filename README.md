@@ -30,7 +30,6 @@ trained to convergence (paired Wilcoxon \(p = 0.031\), 6/6 seeds).
 | Method | Held-out accuracy | vs usual pipeline |
 |---|---:|---:|
 | **ldAttention (distance + genotype)** | **98.9% ± 0.4** | **+4.7 pts** |
-| Plain transformer (no LD bias) | 98.9% ± 0.5 | +4.6 pts |
 | Saturated explicit-LD (all partners, 600 epochs) | 97.2% | +3.0 pts |
 | Usual explicit-LD (top-8 \(r^2\) partners) | 94.2% ± 2.3 | — |
 | Majority genotype | 69.0% ± 4.3 | −25.2 pts |
