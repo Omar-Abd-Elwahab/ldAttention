@@ -65,13 +65,9 @@ pipeline and **+1.8 pts** vs the saturated control (\(p = 0.031\), 6/6 seeds).
 
 At **200 people** the same layer is also **+2.1 pts** over a plain transformer
 (94.6% vs 92.6%). That is the sample-efficiency edge: the bias supplies LD
-structure the transformer has not yet learned from data.
-
-<p align="center">
-  <img src="docs/figures/scaling.png" alt="Accuracy vs cohort size for ldAttention, a plain transformer, and explicit LD" width="640">
-</p>
-
-<p align="center"><em>Figure 3. ldAttention is ahead of explicit LD at every cohort size tested (200 / 400 / 1,000). The gap to a plain transformer is largest when the cohort is small.</em></p>
+structure the transformer has not yet learned from data. The same ranking
+holds at 400 and 1,000 people: ldAttention stays ahead of explicit LD at
+every cohort size tested.
 
 ### Attention recovers true LD without ever seeing \(r^2\)
 
@@ -79,7 +75,7 @@ structure the transformer has not yet learned from data.
   <img src="docs/figures/attention_vs_ld.png" alt="True pairwise r² heatmap next to learned attention" width="680">
 </p>
 
-<p align="center"><em>Figure 4. Ground-truth pairwise \(r^2\) (left) vs learned attention (right). Pearson \(r = 0.56 \pm 0.10\) between the two tables. Genetic \(r^2\) is used only for evaluation — it is never an input.</em></p>
+<p align="center"><em>Figure 3. Ground-truth pairwise \(r^2\) (left) vs learned attention (right). Pearson \(r = 0.56 \pm 0.10\) between the two tables. Genetic \(r^2\) is used only for evaluation — it is never an input.</em></p>
 
 ### The edge holds under heavier missingness and across allele frequencies
 
@@ -87,7 +83,7 @@ structure the transformer has not yet learned from data.
   <img src="docs/figures/robustness.png" alt="Accuracy vs missingness rate and MAF bins" width="820">
 </p>
 
-<p align="center"><em>Figure 5. Left: the same ranking as missingness goes from 10% to 70%. Right: rare and common variants, against the saturated explicit-LD control.</em></p>
+<p align="center"><em>Figure 4. Left: the same ranking as missingness goes from 10% to 70%. Right: rare and common variants, against the saturated explicit-LD control.</em></p>
 
 ### Metrics (do not mix these up)
 

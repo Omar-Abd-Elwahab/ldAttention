@@ -273,35 +273,6 @@ def fig_head_to_head() -> Path:
     return out
 
 
-def fig_scaling() -> Path:
-    scaling = load_scaling()
-    fig, ax = plt.subplots(figsize=(7.2, 4.6))
-    sizes = [n for n, _ in scaling]
-    series = (
-        ("both", "ldAttention", BLUE, "o"),
-        ("no_bias", "Plain transformer", GREY, "s"),
-        ("explicit_ld", "Explicit LD", GOLD, "^"),
-    )
-    for arm, label, color, marker in series:
-        m = np.array([v.get(arm, (np.nan, 0.0))[0] for _, v in scaling])
-        s = np.array([v.get(arm, (np.nan, 0.0))[1] for _, v in scaling])
-        ax.plot(sizes, m, marker=marker, color=color, lw=2.4, ms=8, label=label)
-        ax.fill_between(sizes, m - s, m + s, color=color, alpha=0.14, lw=0)
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(sizes)
-    ax.set_xticklabels([str(s) for s in sizes])
-    ax.set_xlabel("People in the cohort")
-    ax.set_ylabel("Held-out imputation accuracy")
-    ax.set_title("The LD layer stays ahead of explicit LD at every size")
-    ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd")
-    ax.set_ylim(0.84, 1.02)
-    fig.tight_layout()
-    out = OUT / "scaling.png"
-    fig.savefig(out, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    return out
-
-
 def fig_robustness() -> Path:
     data = load_summary()
     both = data[("ablation", "both")]
@@ -395,7 +366,6 @@ def make_all() -> dict[str, Path]:
     return {
         "architecture": fig_architecture(),
         "head_to_head": fig_head_to_head(),
-        "scaling": fig_scaling(),
         "robustness": fig_robustness(),
         "attention_vs_ld": fig_attention_vs_ld(),
     }
