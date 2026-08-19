@@ -1,0 +1,21 @@
+experiment:
+  name: ldaware_imputation_baseline
+  seed: 42
+
+model:
+  input_dim: 2
+  hidden_dim: 256
+  num_heads: 8
+  num_layers: 4
+  dropout: 0.1
+  num_classes: 3
+
+training:
+  epochs: 5
+  batch_size: 8
+  learning_rate: 1.0e-4
+  missing_rate: 0.15
+
+data:
+  window_size: 150000
+  max_distance_bp: 1000000

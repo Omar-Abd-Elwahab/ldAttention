@@ -1,0 +1,48 @@
+{
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "device": "cuda",
+  "device_name": "NVIDIA GeForce RTX 2060",
+  "torch_version": "2.11.0+cu128",
+  "base": {
+    "n_haplotypes": 400,
+    "n_sites": 64,
+    "n_founders": 5,
+    "rho": 15.0,
+    "hidden_dim": 128,
+    "num_heads": 8,
+    "num_layers": 4,
+    "dropout": 0.0,
+    "genotype_rank": 32,
+    "position_frequencies": 16,
+    "mask_rate_jitter": 0.2,
+    "label_smoothing": 0.0,
+    "epochs": 500,
+    "lr": 0.0015,
+    "batch_size": 64,
+    "mask_rate": 0.3,
+    "use_msprime": true,
+    "min_maf": 0.05,
+    "baseline_top_k": 8,
+    "baseline_epochs": 150,
+    "eval_every": 10
+  },
+  "mask_rate_sweep": [],
+  "scaling_sizes": [
+    200,
+    400,
+    800,
+    1600
+  ],
+  "scaling_seeds": [],
+  "cuda_version": "12.8",
+  "total_seconds": 1580.5565972328186
+}

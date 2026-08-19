@@ -1,0 +1,98 @@
+{
+  "configs": {
+    "none": {
+      "imputation_accuracy": {
+        "mean": 0.444281,
+        "std": 0.04004790653704637
+      },
+      "bias_vs_r2_pearson": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "bias_vs_r2_spearman": {
+        "mean": 0.0,
+        "std": 0.0
+      },
+      "attention_vs_r2_pearson": {
+        "mean": -0.080103,
+        "std": 0.018280000346462433
+      },
+      "attention_vs_r2_spearman": {
+        "mean": -0.23971333333333333,
+        "std": 0.08852440432759519
+      }
+    },
+    "distance_only": {
+      "imputation_accuracy": {
+        "mean": 0.650884,
+        "std": 0.010547434032344863
+      },
+      "bias_vs_r2_pearson": {
+        "mean": 0.15538466666666664,
+        "std": 0.0717283146757417
+      },
+      "bias_vs_r2_spearman": {
+        "mean": 0.08821633333333334,
+        "std": 0.05421144844854165
+      },
+      "attention_vs_r2_pearson": {
+        "mean": 0.18451833333333334,
+        "std": 0.07959985647530333
+      },
+      "attention_vs_r2_spearman": {
+        "mean": 0.08391133333333334,
+        "std": 0.048623344765886096
+      }
+    },
+    "genotype_only": {
+      "imputation_accuracy": {
+        "mean": 0.44481866666666664,
+        "std": 0.01192673191709371
+      },
+      "bias_vs_r2_pearson": {
+        "mean": 0.06769233333333334,
+        "std": 0.03222504761137764
+      },
+      "bias_vs_r2_spearman": {
+        "mean": 0.15437266666666666,
+        "std": 0.0368193837929003
+      },
+      "attention_vs_r2_pearson": {
+        "mean": -0.027864333333333335,
+        "std": 0.02332296209508751
+      },
+      "attention_vs_r2_spearman": {
+        "mean": -0.07449033333333334,
+        "std": 0.042972561860900135
+      }
+    },
+    "full": {
+      "imputation_accuracy": {
+        "mean": 0.5918873333333333,
+        "std": 0.07230035806427396
+      },
+      "bias_vs_r2_pearson": {
+        "mean": 0.19566333333333333,
+        "std": 0.05440621131410968
+      },
+      "bias_vs_r2_spearman": {
+        "mean": 0.2534443333333333,
+        "std": 0.04367680631130847
+      },
+      "attention_vs_r2_pearson": {
+        "mean": 0.190958,
+        "std": 0.12812040915482592
+      },
+      "attention_vs_r2_spearman": {
+        "mean": 0.15127966666666667,
+        "std": 0.08637777368950623
+      }
+    }
+  },
+  "distance_prior_baseline": {
+    "pearson_mean": 0.264939613479151,
+    "pearson_std": 0.015984918760538414,
+    "spearman_mean": 0.3292335262605455,
+    "spearman_std": 0.015370446879320864
+  }
+}

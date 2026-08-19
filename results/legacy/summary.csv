@@ -1,0 +1,5 @@
+config,imputation_accuracy_mean,bias_vs_r2_pearson_mean,bias_vs_r2_spearman_mean,attention_vs_r2_pearson_mean,attention_vs_r2_spearman_mean,imputation_accuracy_std,bias_vs_r2_pearson_std,bias_vs_r2_spearman_std,attention_vs_r2_pearson_std,attention_vs_r2_spearman_std
+none,0.4443,0.0000,0.0000,-0.0801,-0.2397,0.0400,0.0000,0.0000,0.0183,0.0885
+distance_only,0.6509,0.1554,0.0882,0.1845,0.0839,0.0105,0.0717,0.0542,0.0796,0.0486
+genotype_only,0.4448,0.0677,0.1544,-0.0279,-0.0745,0.0119,0.0322,0.0368,0.0233,0.0430
+full,0.5919,0.1957,0.2534,0.1910,0.1513,0.0723,0.0544,0.0437,0.1281,0.0864

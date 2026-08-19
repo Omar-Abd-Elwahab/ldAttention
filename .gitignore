@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Virtual environments
+.venv/
+.venv312/
+venv/
+
+# Logs
+*.log
+
+# Scratch / superseded experiment dumps (keep results/, results_large/, results_small/)
+results_smoke/
+results_old_cpu/
+results_stale_backup/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Local toolchains (portable git / gh)
+.tools/
