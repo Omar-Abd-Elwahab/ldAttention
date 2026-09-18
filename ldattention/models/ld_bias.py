@@ -106,20 +106,103 @@ class LDAttentionBias(nn.Module):
             self.pop_film = nn.Embedding(num_populations, num_heads * 2)
             nn.init.zeros_(self.pop_film.weight)
 
+    @property
+    def has_bias_terms(self) -> bool:
+        """False for the plain-transformer control, whose bias is all zeros."""
+        return bool(self.use_distance_bias or self.use_genotype_bias)
+
+    @staticmethod
+    def _shared_positions(positions: torch.Tensor) -> bool:
+        """True when every individual carries the same variant coordinates.
+
+        A cohort is genotyped at one set of variants, so the distance term is
+        then a single matrix repeated across the batch rather than B distinct
+        ones.
+        """
+        return positions.shape[0] > 1 and bool((positions[:1] == positions).all())
+
     def _distance_bias(self, positions: torch.Tensor) -> torch.Tensor:
         # positions: [B, L] -> pairwise |Δpos|: [B, L, L]
         dist = (positions[:, :, None] - positions[:, None, :]).abs()
         bucket_ids = torch.bucketize(dist, self.distance_boundaries.to(dist.device))
-        # [B, L, L, H] -> [B, H, L, L]; symmetric because dist is symmetric.
-        return self.distance_bias(bucket_ids).permute(0, 3, 1, 2)
+        # Gather as [H, B, L, L] and permute the head dimension forward, rather
+        # than emitting [B, L, L, H] and permuting the *last* axis. Both give
+        # [B, H, L, L] and are symmetric because dist is, but only this one
+        # leaves the final axis unit-strided -- which is what the fused
+        # attention kernels require of an additive mask. The alternative is
+        # silently rejected and falls back to materializing the scores.
+        per_head = self.distance_bias.weight.t()[:, bucket_ids]  # [H, B, L, L]
+        return per_head.permute(1, 0, 2, 3)
 
-    def _genotype_bias(self, token_embeddings: torch.Tensor) -> torch.Tensor:
+    def _genotype_proj(self, token_embeddings: torch.Tensor) -> torch.Tensor:
+        """``[B, L, C]`` -> per-head low-rank factors ``[B, H, L, r]``."""
         b, seq_len, _ = token_embeddings.shape
         proj = self.geno_proj(token_embeddings)  # [B, L, H*r]
-        proj = proj.view(b, seq_len, self.num_heads, self.genotype_rank)
+        return proj.view(b, seq_len, self.num_heads, self.genotype_rank).transpose(1, 2)
+
+    def _genotype_bias(self, token_embeddings: torch.Tensor) -> torch.Tensor:
+        proj = self._genotype_proj(token_embeddings)  # [B, H, L, r]
         # Symmetric low-rank correlation-like term: same projection for i and j.
-        bias = torch.einsum("bihr,bjhr->bhij", proj, proj)
-        return bias * self.geno_scale
+        return torch.einsum("bhir,bhjr->bhij", proj, proj) * self.geno_scale
+
+    def attention_terms(
+        self,
+        positions: torch.Tensor,
+        token_embeddings: torch.Tensor | None = None,
+        key_padding_mask: torch.Tensor | None = None,
+        population_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
+        """The bias as an additive mask plus a pair of low-rank factors.
+
+        :meth:`forward` sums both terms into a ``[B, H, L, L]`` tensor. That is
+        the portable interface, but it costs quadratic memory and rules out
+        fused attention kernels, which cannot take an arbitrary mask. The
+        genotype term is a symmetric inner product, so it can instead be folded
+        into the query and key vectors::
+
+            Q' = [Q / sqrt(d), Z * geno_scale]      K' = [K, Z]
+            Q'K'^T = QK^T / sqrt(d) + geno_scale * ZZ^T
+
+        which is the biased logit exactly, with no ``L x L`` tensor anywhere.
+        Only the distance term must stay additive, and it is identical for every
+        individual whenever the cohort shares variant positions, so it keeps a
+        batch dimension of 1 and is broadcast.
+
+        Returns ``(additive_mask, z_query, z_key)``; any element may be ``None``.
+        """
+        if positions.dim() == 3:
+            positions = positions.squeeze(-1)
+        if positions.dim() != 2:
+            raise ValueError("positions must be [B, L] or [B, L, 1]")
+
+        # A padding mask *replaces* logits with a large negative constant rather
+        # than adding to them, which folded factors cannot express. The
+        # imputation pipeline never pads, so fall back to the dense bias.
+        if key_padding_mask is not None:
+            return self(positions, token_embeddings, key_padding_mask, population_id), None, None
+
+        gates = None
+        if self.num_populations > 0 and population_id is not None:
+            gates = 1.0 + self.pop_film(population_id)  # [B, 2H], centered at 1
+
+        mask = None
+        if self.use_distance_bias:
+            shared = gates is None and self._shared_positions(positions)
+            mask = self._distance_bias(positions[:1] if shared else positions)
+            if gates is not None:
+                mask = mask * gates[:, : self.num_heads, None, None]
+
+        z_query = z_key = None
+        if self.use_genotype_bias and token_embeddings is not None:
+            proj = self._genotype_proj(token_embeddings)  # [B, H, L, r]
+            # The scale and any population gate go on one side only, which
+            # leaves the implied matrix symmetric for either sign of the gate.
+            z_query = proj * self.geno_scale
+            if gates is not None:
+                z_query = z_query * gates[:, self.num_heads :, None, None]
+            z_key = proj
+
+        return mask, z_query, z_key
 
     def forward(
         self,

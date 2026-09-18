@@ -143,7 +143,8 @@ def simulate_haplotypes_msprime(
     seed: int,
     mutation_rate: float = 2.5e-8,
     min_maf: float = 0.05,
-) -> tuple[np.ndarray, np.ndarray]:
+    return_span_bp: bool = False,
+) -> tuple[np.ndarray, ...]:
     """Coalescent-with-recombination simulation using msprime (optional)."""
     import msprime  # noqa: PLC0415
 
@@ -175,7 +176,12 @@ def simulate_haplotypes_msprime(
     start = max((geno.shape[0] - n_sites) // 2, 0)
     idx = np.arange(start, start + n_sites)
     geno, pos = geno[idx], pos[idx]
+    # Normalizing to [0, 1] discards physical scale, so a caller comparing
+    # window *lengths* cannot otherwise recover how many base pairs are covered.
+    span_bp = float(pos.max() - pos.min())
     positions = (pos - pos.min()) / (pos.max() - pos.min() + 1e-9)
+    if return_span_bp:
+        return geno.T.astype(np.int8), positions.astype(np.float32), span_bp
     return geno.T.astype(np.int8), positions.astype(np.float32)
 
 
@@ -605,7 +611,9 @@ def extract_mean_bias(model, data, batch_size, use_population, pop_filter=None, 
             feats = _prepare_eval(features[start : start + batch_size], use_missing_channel)
             poss = positions[start : start + batch_size]
             pop_id = pop[start : start + batch_size] if use_population else None
-            model(feats, poss, population_id=pop_id, need_weights=False)
+            # need_weights routes through LDAttentionBias.forward, which the
+            # fused path deliberately skips; without it the hook sees nothing.
+            model(feats, poss, population_id=pop_id, need_weights=True)
             for b in captured:
                 bias_sum += b.mean(dim=(0, 1))
                 count += 1

@@ -91,27 +91,47 @@ class LDAwareSelfAttention(nn.Module):
         k = self._reshape_heads(self.k_proj(x))
         v = self._reshape_heads(self.v_proj(x))
 
-        bias = self.ld_bias(
-            positions=positions,
-            token_embeddings=x,
-            key_padding_mask=attention_mask,
-            population_id=population_id,
-        )  # [B, H, L, L], additive
-        bias = bias.to(q.dtype)
+        active = self.ld_bias.has_bias_terms or attention_mask is not None
+        scale = self.head_dim**-0.5
 
         if need_weights:
-            scale = self.head_dim**-0.5
-            attn_logits = torch.matmul(q, k.transpose(-2, -1)) * scale + bias
+            # Interpretability path: materialize the bias so it can be read out.
+            attn_logits = torch.matmul(q, k.transpose(-2, -1)) * scale
+            if active:
+                attn_logits = attn_logits + self.ld_bias(
+                    positions=positions,
+                    token_embeddings=x,
+                    key_padding_mask=attention_mask,
+                    population_id=population_id,
+                ).to(q.dtype)
             attn_weights = torch.softmax(attn_logits, dim=-1)
             attn_weights = self.dropout(attn_weights)
             attended = torch.matmul(attn_weights, v)  # [B, H, L, D]
         else:
+            # Training/inference path. The genotype term rides along inside the
+            # query and key vectors instead of becoming an [B, H, L, L] mask,
+            # and the distance term is broadcast from a single matrix, so the
+            # quadratic tensor is never built. With no bias at all this reduces
+            # to a plain fused attention call.
+            mask = z_query = z_key = None
+            if active:
+                mask, z_query, z_key = self.ld_bias.attention_terms(
+                    positions=positions,
+                    token_embeddings=x,
+                    key_padding_mask=attention_mask,
+                    population_id=population_id,
+                )
+            if z_query is not None:
+                q = torch.cat([q * scale, z_query.to(q.dtype)], dim=-1)
+                k = torch.cat([k, z_key.to(k.dtype)], dim=-1)
+                scale = 1.0  # the 1/sqrt(d) factor is already inside q
             attended = F.scaled_dot_product_attention(
                 q,
                 k,
                 v,
-                attn_mask=bias,
+                attn_mask=None if mask is None else mask.to(q.dtype),
                 dropout_p=self.dropout_p if self.training else 0.0,
+                scale=scale,
             )
             attn_weights = None
 

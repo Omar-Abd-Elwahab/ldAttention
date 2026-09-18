@@ -1,0 +1,26 @@
+{
+  "experiment": "chromosome",
+  "device": "cuda",
+  "device_name": "NVIDIA GeForce RTX 2060",
+  "torch_version": "2.11.0+cu128",
+  "cuda_version": "12.8",
+  "n_seeds": 3,
+  "windows": "128,256,512,1024",
+  "window_epochs": {
+    "128": 250,
+    "256": 200,
+    "512": 150,
+    "1024": 80
+  },
+  "window_batch": {
+    "128": 32,
+    "256": 32,
+    "512": 32,
+    "1024": 16
+  },
+  "chrom_sites": 256,
+  "chrom_epochs": 150,
+  "n_chrom": 6,
+  "n_train_chrom": 4,
+  "total_seconds": 3537.8890109062195
+}
