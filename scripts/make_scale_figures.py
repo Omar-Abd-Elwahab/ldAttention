@@ -47,12 +47,24 @@ def _ms(values: list[float]) -> tuple[float, float]:
     return mean(values), (pstdev(values) if len(values) > 1 else 0.0)
 
 
+def _paired_gap(rows: list[dict]) -> tuple[float, float]:
+    """Mean and sd of (ldAttention - plain transformer) over shared seeds."""
+    both = {int(r["seed"]): float(r["accuracy"]) for r in rows if r["arm"] == "both"}
+    plain = {int(r["seed"]): float(r["accuracy"]) for r in rows if r["arm"] == "no_bias"}
+    paired = [both[s] - plain[s] for s in sorted(set(both) & set(plain))]
+    return _ms(paired)
+
+
 def window_figure() -> Path:
     rows = _rows("window_short/window_raw.csv", "window_long/window_raw.csv")
     by_len: dict[int, list[dict]] = defaultdict(list)
     for r in rows:
         by_len[int(r["n_sites"])].append(r)
     lengths = sorted(by_len)
+    # The per-window budget falls as L grows, so the sweep confounds window
+    # length with training time. This run retrains the longest window for the
+    # budget a short window got, which is what separates the two.
+    converged = _rows("window_converge/window_raw.csv")
 
     series = {
         "ldAttention": ("accuracy", "both", BLUE, "o"),
@@ -72,31 +84,49 @@ def window_figure() -> Path:
     ax.set_xscale("log", base=2)
     ax.set_xticks(lengths)
     ax.set_xticklabels([str(L) for L in lengths])
+    if converged:
+        L_c = int(converged[0]["n_sites"])
+        for arm, color in (("both", BLUE), ("no_bias", GREY)):
+            vals = [100 * float(r["accuracy"]) for r in converged if r["arm"] == arm]
+            ax.scatter([L_c], [mean(vals)], s=150, marker="*", color=color,
+                       edgecolor="white", zorder=4)
+        ax.annotate("retrained to\n300 epochs", (L_c, mean(
+            [100 * float(r["accuracy"]) for r in converged if r["arm"] == "no_bias"])),
+            textcoords="offset points", xytext=(-14, -34), ha="right", fontsize=8.5,
+            color="#555555", arrowprops=dict(arrowstyle="-|>", color="#555555", lw=1.2))
     ax.set_xlabel("SNPs in the window")
     ax.set_ylabel("Held-out imputation accuracy (%)")
-    ax.set_title("A.  The LD bias holds up as windows grow")
+    ax.set_title("A.  Both transformers beat explicit LD at every length")
     ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd", loc="lower left")
 
     ax = axes[1]
-    deltas, errs = [], []
+    labels, deltas, errs, colors = [], [], [], []
     for L in lengths:
-        both = {int(r["seed"]): float(r["accuracy"]) for r in by_len[L] if r["arm"] == "both"}
-        plain = {int(r["seed"]): float(r["accuracy"]) for r in by_len[L] if r["arm"] == "no_bias"}
-        paired = [both[s] - plain[s] for s in sorted(set(both) & set(plain))]
-        m, s = _ms(paired)
+        m, s = _paired_gap(by_len[L])
+        labels.append(f"{L}\n{by_len[L][0]['epochs']} ep")
         deltas.append(100 * m)
         errs.append(100 * s)
-    bars = ax.bar([str(L) for L in lengths], deltas, yerr=errs, capsize=4,
-                  color=BLUE, edgecolor="white", width=0.62)
+        colors.append(BLUE)
+    if converged:
+        m, s = _paired_gap(converged)
+        labels.append(f"{converged[0]['n_sites']}\n{converged[0]['epochs']} ep")
+        deltas.append(100 * m)
+        errs.append(100 * s)
+        colors.append(RED)
+    bars = ax.bar(labels, deltas, yerr=errs, capsize=4, color=colors,
+                  edgecolor="white", width=0.62)
     for bar, d in zip(bars, deltas):
-        ax.text(bar.get_x() + bar.get_width() / 2, d + 0.22, f"{d:+.2f}",
-                ha="center", fontsize=10, fontweight="bold", color=BLUE)
+        ax.text(bar.get_x() + bar.get_width() / 2, d + max(deltas) * 0.03, f"{d:+.2f}",
+                ha="center", fontsize=10, fontweight="bold", color=bar.get_facecolor())
     ax.axhline(0, color=DARK, lw=1)
-    ax.set_xlabel("SNPs in the window")
+    ax.set_xlabel("SNPs in the window, and epochs of training")
     ax.set_ylabel("Accuracy gain over a plain transformer (pp)")
-    ax.set_title("B.  The bias earns its place at long windows")
-    ax.set_ylim(0, max(deltas) * 1.30)
-    ax.text(0.02, 0.96, "equal epoch budget per window;\nneither arm converged at 512/1024",
+    ax.set_title("B.  Most of that gain was undertraining, not window length")
+    ax.set_ylim(0, max(deltas) * 1.32)
+    ax.text(0.03, 0.96,
+            "The budget shrinks as windows grow, so length and\n"
+            "training time are confounded. Give 1024 SNPs the\n"
+            "same budget and the gap falls from +7.08 to +0.85 pp.",
             transform=ax.transAxes, va="top", fontsize=8.5, color="#555555", style="italic")
 
     fig.tight_layout()
