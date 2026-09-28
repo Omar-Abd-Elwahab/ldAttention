@@ -7,7 +7,19 @@ name = "ldattention"
 version = "0.1.0"
 description = "Reusable LD-aware attention for genomic transformers."
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
+authors = [
+  { name = "Omar Abdelwahab" },
+  { name = "Davoud Torkamaneh" },
+]
+keywords = [
+  "linkage-disequilibrium",
+  "transformers",
+  "attention",
+  "genomics",
+  "genotype-imputation",
+]
 dependencies = [
   "torch>=2.2",
   "numpy>=1.24",

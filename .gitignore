@@ -38,3 +38,6 @@ scripts/render_poster_pdf.py
 scripts/make_script.py
 scripts/check_poster.py
 scripts/make_mock_results.py
+
+# Manuscript drafts and Word builds — kept private until preprint/submission
+manuscript/

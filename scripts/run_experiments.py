@@ -81,10 +81,9 @@ METRIC_KEYS = [
 
 _MATRIX_KEYS = ("_r2_matrix", "_attention_matrix", "_bias_matrix", "_abs_dist")
 
-# Only the full model needs the accuracy-vs-missingness curve; refitting the
-# explicit-LD control at every level for every ablation arm would triple runtime
-# for a figure that only reports the full model.
-SWEEP_CONFIGS = {"both", "both_pop_film"}
+# Both LDAttention (+Bias) and LDAttention alone need the accuracy-vs-missingness
+# curve so Figure 4A can show all five methods. Explicit-LD is refitted per rate.
+SWEEP_CONFIGS = {"both", "no_bias", "both_pop_film"}
 
 
 def ablation_configs(base: dict, sweep: tuple[float, ...]) -> list[RunConfig]:

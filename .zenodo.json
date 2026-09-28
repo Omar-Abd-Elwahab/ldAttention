@@ -1,0 +1,34 @@
+{
+  "title": "LDAttention: transformers as linkage-disequilibrium engines",
+  "description": "Reusable LD-aware attention for genomic transformers, with simulation benchmarks, baselines, reported result tables, and figure scripts accompanying a forthcoming manuscript.",
+  "upload_type": "software",
+  "publication_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "creators": [
+    {
+      "name": "Abdelwahab, Omar",
+      "affiliation": "Université Laval"
+    },
+    {
+      "name": "Torkamaneh, Davoud",
+      "affiliation": "Université Laval"
+    }
+  ],
+  "keywords": [
+    "linkage disequilibrium",
+    "transformers",
+    "attention",
+    "genotype imputation",
+    "genomics",
+    "machine learning"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Omar-Abd-Elwahab/ldAttention",
+      "relation": "isSupplementTo",
+      "resource_type": "software"
+    }
+  ],
+  "version": "0.1.0"
+}

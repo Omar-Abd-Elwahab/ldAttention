@@ -70,12 +70,11 @@ from ldattention.validation import (  # noqa: E402
 # (use_distance_bias, use_genotype_bias)
 ARMS = {"both": (True, True), "no_bias": (False, False)}
 
-# Attention is O(L^2) in both time and memory, so a fixed epoch count would make
-# the long windows cost ~30x the short ones. The budget is scaled instead --
-# identically for every arm at a given window, so each head-to-head stays fair.
-# Longer windows see more masked targets per epoch, which offsets the reduction.
-WINDOW_EPOCHS = {128: 250, 256: 200, 512: 150, 1024: 80}
-WINDOW_BATCH = {128: 32, 256: 32, 512: 32, 1024: 16}  # 1024 at 32 does not fit in 6 GB
+# Equal epoch budget across window lengths so length is not confounded with
+# undertraining. Mixed precision + genotype-folded attention frees enough memory
+# on a 6 GB card for these batches; attention remains O(L^2) in compute.
+WINDOW_EPOCHS = {128: 300, 256: 300, 512: 300, 1024: 300}
+WINDOW_BATCH = {128: 128, 256: 128, 512: 64, 1024: 48}
 
 
 def _model(cfg: RunConfig, device: torch.device) -> LDAwareImputationModel:
@@ -446,6 +445,7 @@ def main() -> None:
         "windows": args.windows,
         "window_epochs": WINDOW_EPOCHS,
         "window_batch": WINDOW_BATCH,
+        "use_amp": True,
         "chrom_sites": args.chrom_sites,
         "chrom_epochs": args.chrom_epochs,
         "n_chrom": args.n_chrom,

@@ -68,6 +68,9 @@ class RunConfig:
     weight_decay: float = 0.01
     warmup_frac: float = 0.1
     grad_clip: float = 1.0
+    # Mixed precision on CUDA: same math, ~2x wall-clock and lower peak memory
+    # on Ampere-class and earlier cards when fused attention is available.
+    use_amp: bool = True
     mask_rate: float = 0.2
     # Contiguous dropout, like a GBS lane dropping a stretch of the window,
     # instead of hiding sites independently. Nearby LD partners vanish together,
@@ -505,6 +508,8 @@ def train_model(
     steps_per_epoch = max(math.ceil(n / cfg.batch_size), 1)
     total_steps = cfg.epochs * steps_per_epoch
     warmup = max(int(total_steps * cfg.warmup_frac), 1)
+    amp_enabled = bool(cfg.use_amp and features.device.type == "cuda")
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
 
     def lr_lambda(step: int) -> float:
         if step < warmup:
@@ -540,13 +545,16 @@ def train_model(
             )
             if not bool(mask.any()):
                 continue
-            logits, _ = model(masked_feats, poss, population_id=pop_id)
-            loss = F.cross_entropy(logits[mask], labs[mask], label_smoothing=cfg.label_smoothing)
-            optimizer.zero_grad()
-            loss.backward()
+            with torch.amp.autocast("cuda", enabled=amp_enabled):
+                logits, _ = model(masked_feats, poss, population_id=pop_id)
+                loss = F.cross_entropy(logits[mask], labs[mask], label_smoothing=cfg.label_smoothing)
+            optimizer.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
             if cfg.grad_clip > 0:
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
             scheduler.step()
             with torch.no_grad():
                 correct += int((logits[mask].argmax(-1) == labs[mask]).sum())

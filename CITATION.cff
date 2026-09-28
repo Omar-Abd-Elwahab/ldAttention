@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below.
+  Prefer the peer-reviewed publication once it is available.
+title: "LDAttention: transformers as linkage-disequilibrium engines"
+version: "0.1.0"
+date-released: "2026-09-28"
+type: software
+authors:
+  - family-names: Abdelwahab
+    given-names: Omar
+    affiliation: "Université Laval"
+  - family-names: Torkamaneh
+    given-names: Davoud
+    affiliation: "Université Laval"
+license: MIT
+repository-code: "https://github.com/Omar-Abd-Elwahab/ldAttention"
+url: "https://github.com/Omar-Abd-Elwahab/ldAttention"
+abstract: >-
+  LDAttention is a locus-level transformer that learns linkage disequilibrium
+  through self-attention without a precomputed pairwise r² matrix. An optional
+  additive layer, LDAttentionBias, injects learned genomic-distance and
+  low-rank context terms into attention logits. This repository provides the
+  Python package, simulation-based evaluation protocol, baselines, reported
+  result tables, and figure-generation scripts accompanying a forthcoming
+  manuscript.
+keywords:
+  - linkage disequilibrium
+  - transformers
+  - attention
+  - genotype imputation
+  - genomics
+  - machine learning
+preferred-citation:
+  type: article
+  title: "LDAttention: transformers as linkage-disequilibrium engines, a simulation proof of concept"
+  authors:
+    - family-names: Abdelwahab
+      given-names: Omar
+    - family-names: Torkamaneh
+      given-names: Davoud
+  status: submitted
+  year: 2026
+  notes: >-
+    Manuscript in preparation / under submission. Cite this software release
+    until the journal DOI is available; then prefer the published article.

@@ -49,9 +49,10 @@ from ldattention.validation import (  # noqa: E402
 )
 
 # Budgets actually used by the accuracy sweep, so cost and accuracy line up.
-SWEEP_EPOCHS = {128: 250, 256: 200, 512: 150, 1024: 80}
-SWEEP_BATCH = {128: 32, 256: 32, 512: 32, 1024: 16}
+SWEEP_EPOCHS = {128: 300, 256: 300, 512: 300, 1024: 300}
+SWEEP_BATCH = {128: 128, 256: 128, 512: 64, 1024: 48}
 BASELINE_EPOCHS = 150
+USE_AMP = True
 
 
 def _sync() -> None:
@@ -148,18 +149,23 @@ def bench_window(L: int, n_ind: int, device: torch.device) -> dict:
         feats, labels = train["features"], train["labels"]
         pos = train["positions"]
 
-        def one_step(model=model, opt=opt, gen=gen) -> None:
+        amp_on = USE_AMP and device.type == "cuda"
+        scaler = torch.amp.GradScaler("cuda", enabled=amp_on)
+
+        def one_step(model=model, opt=opt, gen=gen, scaler=scaler) -> None:
             idx = torch.randperm(n_train, generator=gen, device=device)[:batch]
             f2, p2, y = feats[idx], pos[idx], labels[idx]
             mask = sample_mask(f2.shape[0], L, 0.3, gen, device, True, 8)
             masked = f2.clone()
             masked[mask] = 0.0
             x = torch.cat([masked, mask.to(masked.dtype).unsqueeze(-1)], dim=-1)
-            logits, _ = model(x, p2)
-            loss = F.cross_entropy(logits[mask], y[mask])
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+            with torch.amp.autocast("cuda", enabled=amp_on):
+                logits, _ = model(x, p2)
+                loss = F.cross_entropy(logits[mask], y[mask])
+            opt.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
 
         torch.cuda.reset_peak_memory_stats()
         per_step = _time(one_step, repeats=10, warmup=3)
@@ -207,7 +213,8 @@ def main() -> None:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"device": name, "n_individuals": args.n_individuals,
-                               "sweep_epochs": SWEEP_EPOCHS, "baseline_epochs": BASELINE_EPOCHS,
+                               "sweep_epochs": SWEEP_EPOCHS, "sweep_batch": SWEEP_BATCH,
+                               "baseline_epochs": BASELINE_EPOCHS, "use_amp": USE_AMP,
                                "rows": rows}, indent=2))
     print(f"[done] {out.resolve()}")
 

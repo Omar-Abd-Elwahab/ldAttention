@@ -1,105 +1,84 @@
-# ldAttention
+# LDAttention
 
-A reusable **linkage-disequilibrium (LD) bias** for genomic transformers.
+**Transformers as linkage-disequilibrium (LD) engines** — with an optional
+additive bias layer for stronger inductive structure.
 
-Genomic variants are not independent: nearby SNPs travel together on haplotypes.
-Standard pipelines capture that with an explicit pairwise \(r^2\) table and a
-per-site regression. Standard transformers capture it only if the dataset is
-large enough to learn the structure from scratch.
-
-`LDAttentionBias` does neither. It adds two learned, symmetric terms to the
-attention logits — genomic distance and genotype context — so any transformer
-can use LD without building, storing, or rebuilding an \(r^2\) matrix.
+Standard genomic pipelines materialize LD as a cohort-specific pairwise \(r^2\)
+table. LDAttention instead uses dense self-attention over loci so locus-to-locus
+dependence can be learned directly from genotypes. An optional layer,
+`LDAttentionBias`, further augments attention logits with learned genomic-distance
+and low-rank context terms:
 
 ```
 softmax(QKᵀ / √d + B_distance + B_genotype)
 ```
 
+This repository is the companion software and result archive for a forthcoming
+manuscript (simulation proof of concept). Genotype recovery under block
+missingness is the evaluation *probe*, not a claim of production imputation
+performance.
+
 <p align="center">
-  <img src="docs/figures/architecture.png" alt="LDAttentionBias: distance and genotype terms added to attention logits" width="720">
+  <img src="docs/figures/architecture.png" alt="LDAttention and optional LDAttentionBias" width="720">
 </p>
 
-<p align="center"><em>Figure 1. The layer is an additive <code>[B, H, L, L]</code> tensor. Drop it into any attention implementation that accepts a mask or a position bias.</em></p>
+<p align="center"><em>Figure 1. LDAttention uses standard scaled dot-product attention as a learned LD representation. LDAttentionBias adds distance and genotype-context terms to the logits.</em></p>
 
 ---
 
-## Why the layer matters
+## Key results (simulations)
 
-| What you usually do | What this layer does |
-|---|---|
-| Compute a full (or top-\(k\)) \(r^2\) table per cohort | Never materializes \(r^2\) |
-| Rebuild the table when the panel or the cohort changes | The same weights transfer; LD is an inductive bias |
-| A plain transformer needs a large \(N\) to discover LD | Distance + genotype terms give that structure from the first batch |
+Primary protocol: **128 SNPs × 1,000 people**, msprime coalescent, MAF ≥ 5%,
+GBS-like **block missingness** (`block_len = 8`), **6 seeds**. Equal-budget
+window scaling uses **128–1024 SNPs**, **3 seeds**, **300 epochs**. Every number
+is held-out exact genotype accuracy on the **same masked entries** for every method.
 
-The empirical case is genotype imputation (predict the hidden 0 / 1 / 2 at a
-SNP). The same bias is task-agnostic: any genomic transformer that attends over
-variants can add it.
+<p align="center">
+  <img src="docs/figures/head_to_head.png" alt="Head-to-head accuracy at 1000 and 200 people" width="860">
+</p>
+
+| Method | 1,000 people | 200 people |
+|---|---:|---:|
+| **LDAttention + Bias** | **98.95% ± 0.37** | **94.6% ± 0.8** |
+| LDAttention (no bias) | 98.88% ± 0.48 | 92.6% ± 1.6 |
+| Explicit LD (all partners) | 97.15% ± 1.37 | 92.0% ± 2.1 |
+| Explicit LD (top-8 \(r^2\)) | 94.23% ± 2.29 | 90.2% ± 1.4 |
+| Majority genotype | 68.99% ± 4.33 | 65.8% ± 3.5 |
+
+Under equal training budgets from 128 to 1024 SNPs, LDAttention+Bias stays in a
+near-ceiling band (**98.3%–99.0%**) and leads the strongest sparse baseline
+(top-64 partners) by about **+2.9 to +3.4** percentage points at every length
+(`results_scale/window_equal/`).
+
+<p align="center">
+  <img src="docs/figures/window_scaling.png" alt="Equal-budget window scaling" width="720">
+</p>
+
+<p align="center">
+  <img src="docs/figures/robustness.png" alt="Accuracy vs missingness and MAF" width="820">
+</p>
+
+<p align="center"><em>Figure 4. Missingness sweep (10–70%) now includes LDAttention and LDAttention+Bias; MAF strata on the right.</em></p>
+
+Learned attention correlates with empirical training-set \(r^2\)
+(\(r = 0.558 \pm 0.097\) with the bias layer; \(r^2\) is never a model input).
 
 ---
 
-## Results
+## Install
 
-Reported sweep: **128 SNPs × 1,000 people**, msprime coalescent, MAF ≥ 5%,
-GBS-like **block missingness** (`block_len = 8`), 6 seeds. Every number below
-is **held-out** accuracy on people the model never trained on, scored on the
-**same masked entries** for every method. A point is one percentage point of
-that accuracy.
+Python 3.10+ (reported sweeps used 3.12). A CUDA GPU is recommended for the
+full experiment suite.
 
-### The layer beats the \(r^2\) pipeline — and a plain transformer when data is scarce
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[exp,dev]"
+python -m pytest tests/
+python scripts/train_imputation.py --epochs 5
+```
 
-<p align="center">
-  <img src="docs/figures/head_to_head.png" alt="Head-to-head: ldAttention vs explicit LD at 1000 people and vs a plain transformer at 200 people" width="860">
-</p>
-
-<p align="center"><em>Figure 2. Left: 1,000 people, vs the usual top-8 \(r^2\) pipeline and a saturated all-partner control. Right: 200 people, where the inductive bias is still load-bearing against a plain transformer.</em></p>
-
-| Method | 1,000 people | vs usual \(r^2\) | 200 people |
-|---|---:|---:|---:|
-| **ldAttention (distance + genotype)** | **98.9% ± 0.4** | **+4.7 pts** | **94.6% ± 0.8** |
-| Saturated explicit-LD (all partners) | 97.2% | +3.0 pts | 92.0% |
-| Usual explicit-LD (top-8 \(r^2\) partners) | 94.2% ± 2.3 | — | 90.2% ± 1.4 |
-| Majority genotype | 69.0% ± 4.3 | −25.2 pts | 65.8% ± 3.5 |
-
-Paired Wilcoxon signed-rank on the 1,000-person split: **+4.7 pts** vs the usual
-pipeline and **+1.8 pts** vs the saturated control (\(p = 0.031\), 6/6 seeds).
-
-At **200 people** the same layer is also **+2.1 pts** over a plain transformer
-(94.6% vs 92.6%). That is the sample-efficiency edge: the bias supplies LD
-structure the transformer has not yet learned from data. The same ranking
-holds at 400 and 1,000 people: ldAttention stays ahead of explicit LD at
-every cohort size tested.
-
-### Attention recovers true LD without ever seeing \(r^2\)
-
-<p align="center">
-  <img src="docs/figures/attention_vs_ld.png" alt="True pairwise r² heatmap next to learned attention" width="680">
-</p>
-
-<p align="center"><em>Figure 3. Ground-truth pairwise \(r^2\) (left) vs learned attention (right). Pearson \(r = 0.56 \pm 0.10\) between the two tables. Genetic \(r^2\) is used only for evaluation — it is never an input.</em></p>
-
-### The edge holds under heavier missingness and across allele frequencies
-
-<p align="center">
-  <img src="docs/figures/robustness.png" alt="Accuracy vs missingness rate and MAF bins" width="820">
-</p>
-
-<p align="center"><em>Figure 4. Left: the same ranking as missingness goes from 10% to 70%. Right: rare and common variants, against the saturated explicit-LD control.</em></p>
-
-### Metrics (do not mix these up)
-
-| Quantity | Meaning | Value |
-|---|---|---|
-| Held-out accuracy | Exact 0 / 1 / 2 recovery on hidden sites of unseen people | **98.9%** |
-| Dosage \(r^2\) | \((\mathrm{Pearson}\ r)^2\) of predicted vs true allele count | **0.986** |
-| Pearson \(r\) (attention vs LD) | Correlation of the attention table with genetic \(r^2\) | **0.56 ± 0.10** |
-
-Dosage \(r^2\) is the usual imputation-paper score. Here it tracks accuracy and
-is essentially tied with the plain transformer (0.985), so the **layer’s edge is
-not a dosage-\(r^2\) story**. Training is ordinary cross-entropy.
-
----
-
-## Drop-in use
+### Drop-in use
 
 ```python
 import torch.nn.functional as F
@@ -107,7 +86,6 @@ from ldattention import LDAttentionBias
 
 ld_bias = LDAttentionBias(hidden_dim=256, num_heads=8)
 bias = ld_bias(positions, token_embeddings=x)   # [B, H, L, L]
-
 out = F.scaled_dot_product_attention(q, k, v, attn_mask=bias)
 ```
 
@@ -118,83 +96,87 @@ layer = LDAwareMultiheadAttention(embed_dim=256, num_heads=8)
 out, attn = layer(x, positions)
 ```
 
-The bias is fully learned, symmetric (like LD), per-head, and GPU-native.
-
----
-
-## Install
-
-Python 3.10+ (the reported sweep used 3.12). A CUDA GPU is optional for the
-package and recommended for the full experiment suite.
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[exp,dev]"
-python -m pytest tests/
-python scripts/train_imputation.py --epochs 5
-```
-
 ---
 
 ## Reproduce the reported results
 
 ```bash
+# Primary 128-SNP sweep (writes results_large/)
 python scripts/run_experiments.py --device cuda --use_msprime \
     --block_missing --n_sites 128 --n_haplotypes 2000 --n_seeds 6 \
     --skip_population --skip_budget --out_dir results_large
 
-# Saturated explicit-LD control on the same splits and masks.
-# Use the same device as the sweep: eval masks come from a device generator.
+# Saturated explicit-LD control on the same splits and masks
 python scripts/strong_baseline_pass.py --results results_large --device cuda
 
+# Optional: re-score LDAttention (no bias) across mask rates for Figure 4A
+python scripts/run_nobias_mask_sweep.py --device cuda --out_dir results_large
+
+# Equal-budget window scaling (128–1024 SNPs)
+python scripts/run_scale_experiments.py --experiment window --device cuda
+
 python scripts/make_figures.py
+python scripts/make_scale_figures.py
 ```
 
-`results_large/` is the sweep above. `results/` is an earlier 64-site × 400-person
-archive (10 seeds). `results_small/` is a 100-person 4-arm ablation.
-
-| File | Contents |
+| Path | Contents |
 |---|---|
-| [`results_large/results_summary.csv`](results_large/results_summary.csv) | mean ± std per arm |
-| [`results_large/results_raw.csv`](results_large/results_raw.csv) | one row per (config, seed) |
-| [`results_large/strong_baseline.csv`](results_large/strong_baseline.csv) | saturated explicit-LD control |
-| [`results_large/mask_rate_sweep.csv`](results_large/mask_rate_sweep.csv) | accuracy vs missingness |
-| [`docs/figures/`](docs/figures/) | figures on this page |
+| [`results_large/`](results_large/) | Primary 128-SNP tables, mask-rate sweep, strong baseline |
+| [`results_scale/window_equal/`](results_scale/window_equal/) | Equal-budget window scaling (reported) |
+| [`docs/figures/`](docs/figures/) | Publication figures used in the README |
 
 ---
 
 ## Repository layout
 
 ```
-ldattention/
-  models/ld_bias.py          LDAttentionBias — the reusable primitive
-  models/ld_attention.py     LDAwareSelfAttention
-  models/encoder.py          encoder stack
-  integrations/              adapters for nn.MultiheadAttention / SDPA
-  tasks/imputation.py        0 / 1 / 2 genotype head
-  data/encoding.py           genotype + sinusoidal position features
-  baselines.py               majority + explicit-LD controls
-  validation.py              simulation, metrics, attention extraction
-  stats.py                   exact paired Wilcoxon signed-rank
-scripts/
-  run_experiments.py         ablation, scaling, missingness
-  strong_baseline_pass.py    saturated explicit-LD on saved splits
-  make_figures.py            docs/figures/*.png
-  train_imputation.py        short smoke train
-tests/                       symmetry / shape / metric invariants
-docs/figures/                paper figures
-results_large/               reported sweep
+ldattention/                 Python package (bias, encoder, baselines, metrics)
+scripts/                     Experiment runners and figure builders
+tests/                       Symmetry / shape / metric checks
+docs/figures/                README / manuscript figures
+results_large/               Primary reported sweep
+results_scale/               Window and chromosome-scale experiments
+LICENSE                      MIT
+CITATION.cff                 Software citation metadata
 ```
 
 ---
 
 ## Citation
 
-Manuscript in preparation. For now, cite this repository.
+A manuscript is in preparation / under submission. **Prefer the peer-reviewed
+article once it is available.** Until then, cite this software release
+(see [`CITATION.cff`](CITATION.cff)):
+
+```bibtex
+@software{ldattention2026,
+  title        = {LDAttention: transformers as linkage-disequilibrium engines},
+  author       = {Abdelwahab, Omar and Torkamaneh, Davoud},
+  year         = {2026},
+  version      = {0.1.0},
+  url          = {https://github.com/Omar-Abd-Elwahab/ldAttention},
+  note         = {MIT License. Manuscript forthcoming.}
+}
+```
+
+A **Zenodo DOI** is minted automatically from the GitHub release archive once
+Zenodo’s GitHub integration is enabled for this repository (metadata in
+[`.zenodo.json`](.zenodo.json)). After the first archived release, replace the
+`note` above with the version DOI from the Zenodo record.
 
 ---
 
 ## License
 
-Research code. All rights reserved until a license is added.
+[MIT](LICENSE) — free to use, modify, and redistribute with attribution.
+This is a reuse-friendly license suitable for accompanying a journal submission;
+it does not imply that the manuscript itself is under MIT (manuscript text and
+figures for publication remain under the journal / preprint terms).
+
+---
+
+## Status
+
+Proof-of-concept research software. Simulated data only; not a production
+genotype-imputation package. External validation on real panels and downstream
+tasks beyond the masking probe are planned next steps.

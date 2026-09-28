@@ -28,11 +28,15 @@ RESULTS = Path(os.environ.get("LDATTENTION_RESULTS", _DEFAULT))
 OUT = ROOT / "docs" / "figures"
 OUT.mkdir(parents=True, exist_ok=True)
 
-BLUE = "#2F5D9F"
-GREEN = "#3D7A4A"
-GOLD = "#C8961A"
-GREY = "#7A7A7A"
+# Shared palette across all manuscript figures.
+BLUE = "#2F5D9F"        # LDAttention + Bias (primary)
+SLATE = "#5B7C99"       # LDAttention alone
+GOLD = "#C8961A"        # Explicit LD (top-64 / all partners / main)
+GOLD_LIGHT = "#E0BE72"  # Explicit LD (top-8)
+MAJORITY = "#A8A8A8"    # Majority genotype baseline
+GREEN = "#3D7A4A"       # Architecture diagram only
 DARK = "#222222"
+GREY = SLATE  # back-compat alias used by older call sites
 
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
@@ -111,16 +115,22 @@ def load_scaling() -> list[tuple[int, dict[str, tuple[float, float]]]]:
         if acc is None:
             continue
         sizes[int(n)][arm] = (acc, metrics.get("imputation_accuracy_std", 0.0))
-        sizes[int(n)]["explicit_ld"] = (
+        # Default explicit baseline in the main sweep is top-8.
+        sizes[int(n)]["explicit_top8"] = (
             metrics.get("baseline_explicit_ld_accuracy", np.nan),
             metrics.get("baseline_explicit_ld_accuracy_std", 0.0),
+        )
+        sizes[int(n)]["majority"] = (
+            metrics.get("baseline_majority_accuracy", np.nan),
+            metrics.get("baseline_majority_accuracy_std", 0.0),
         )
     strong = load_strong_baseline()
     rate = eval_rate()
     for n, arms in sizes.items():
         entry = strong.get(("scaling", f"both_n{n}", rate))
         if entry:
-            arms["explicit_ld"] = (entry["accuracy"], entry.get("accuracy_std", 0.0))
+            # Saturated all-partner control (top_k = L-1).
+            arms["explicit_all"] = (entry["accuracy"], entry.get("accuracy_std", 0.0))
     return sorted(sizes.items())
 
 
@@ -131,11 +141,15 @@ def load_sweep() -> dict[float, dict[str, tuple[float, float]]]:
     acc: dict[float, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     with path.open() as f:
         for r in csv.DictReader(f):
-            if r["experiment"] != "ablation" or r["config"] != "both":
+            if r["experiment"] != "ablation":
                 continue
             rate = float(r["mask_rate"])
-            for series in ("model", "explicit_ld", "majority"):
-                acc[rate][series].append(float(r[series]))
+            if r["config"] == "both":
+                acc[rate]["model"].append(float(r["model"]))
+                acc[rate]["explicit_top8"].append(float(r["explicit_ld"]))
+                acc[rate]["majority"].append(float(r["majority"]))
+            elif r["config"] == "no_bias":
+                acc[rate]["ldattention"].append(float(r["model"]))
     out = {
         rate: {s: (float(np.mean(v)), float(np.std(v))) for s, v in series.items()}
         for rate, series in sorted(acc.items())
@@ -143,7 +157,7 @@ def load_sweep() -> dict[float, dict[str, tuple[float, float]]]:
     strong = load_strong_baseline()
     for (experiment, config, rate), entry in strong.items():
         if experiment == "ablation" and config == "both" and rate in out:
-            out[rate]["explicit_ld"] = (entry["accuracy"], entry.get("accuracy_std", 0.0))
+            out[rate]["explicit_all"] = (entry["accuracy"], entry.get("accuracy_std", 0.0))
     return out
 
 
@@ -171,8 +185,8 @@ def fig_architecture() -> Path:
         ax.text(x + w / 2, y + h / 2, text, ha="center", va="center",
                 fontsize=fs, fontweight="bold" if bold else "normal", zorder=3)
 
-    ax.text(5, 3.78, "LDAttentionBias", ha="center", fontsize=16, fontweight="bold")
-    ax.text(5, 3.50, "Additive attention bias — no explicit $r^2$ matrix",
+    ax.text(5, 3.78, "LDAttention", ha="center", fontsize=16, fontweight="bold")
+    ax.text(5, 3.50, "Optional LDAttentionBias layer — no explicit $r^2$ matrix",
             ha="center", fontsize=11, color="#555555")
 
     box(0.25, 2.95, 9.5, 0.40, "genotypes + genomic positions", "#FFF6D6", GOLD)
@@ -198,71 +212,80 @@ def fig_architecture() -> Path:
 
 
 def fig_head_to_head() -> Path:
-    """Two panels: replace the r² pipeline at full N; beat a plain transformer at small N."""
+    """Five-way comparison: Majority, Explicit top-8, Explicit all/top-64, LDAttention, +Bias."""
     data = load_summary()
     both = data[("ablation", "both")]
+    no_bias = data[("ablation", "no_bias")]
     strong = load_strong_baseline().get(("ablation", "both", eval_rate()), {})
     scaling = dict(load_scaling())
     small_n = min(scaling) if scaling else None
     small = scaling.get(small_n, {}) if small_n else {}
 
-    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.8))
+    fig, axes = plt.subplots(1, 2, figsize=(12.4, 4.8))
 
-    # Left: reported cohort vs explicit-LD
+    # Shared bar order and colours for both panels.
+    # Primary cohort: stronger explicit control is saturated all-partners (top_k=127).
+    # Colour role matches window figures where gold = Explicit LD (top-64).
+    def _bars(ax, labels, means, stds, colors, title):
+        bars = ax.bar(labels, means, yerr=stds, capsize=3.5, color=colors,
+                      edgecolor="white", width=0.72)
+        _annotate_bars(ax, bars, means, stds, dy=0.010)
+        ax.set_ylim(0.55, 1.10)
+        ax.set_ylabel("Held-out genotype accuracy")
+        ax.set_title(title)
+        ax.tick_params(axis="x", labelsize=9)
+
+    # Left: n=1000 primary
     ax = axes[0]
-    labels = ["Majority\ngenotype", "Explicit LD\n(top-8 $r^2$)", "Explicit LD\n(all partners)", "ldAttention"]
+    labels = [
+        "Majority\ngenotype",
+        "Explicit LD\n(top-8)",
+        "Explicit LD\n(all partners)",
+        "LDAttention",
+        "LDAttention\n+Bias",
+    ]
     means = [
         both["baseline_majority_accuracy"],
         both["baseline_explicit_ld_accuracy"],
         strong.get("accuracy", np.nan),
+        no_bias["imputation_accuracy"],
         both["imputation_accuracy"],
     ]
     stds = [
         both["baseline_majority_accuracy_std"],
         both["baseline_explicit_ld_accuracy_std"],
         strong.get("accuracy_std", 0.0),
+        no_bias["imputation_accuracy_std"],
         both["imputation_accuracy_std"],
     ]
-    colors = [GREY, "#E6C35C", GOLD, BLUE]
-    bars = ax.bar(labels, means, yerr=stds, capsize=4, color=colors, edgecolor="white", width=0.68)
-    _annotate_bars(ax, bars, means, stds)
-    delta = means[3] - means[1]
-    ax.annotate(
-        f"{100 * delta:+.1f} pts vs usual $r^2$ pipeline",
-        xy=(3, means[3] + stds[3] + 0.04),
-        ha="center", fontsize=10, fontweight="bold", color=BLUE,
-    )
-    ax.set_ylim(0.55, 1.12)
-    ax.set_ylabel("Held-out imputation accuracy")
-    ax.set_title("A.  Edge over explicit LD  (1,000 people)")
+    colors = [MAJORITY, GOLD_LIGHT, GOLD, SLATE, BLUE]
+    _bars(ax, labels, means, stds, colors, "A.  Edge over explicit LD  (1,000 people)")
 
-    # Right: smallest scaling cohort vs transformer + explicit LD
+    # Right: smallest scaling cohort
     ax = axes[1]
     if small:
-        labels = ["Explicit LD", "Plain\ntransformer", "ldAttention"]
+        labels = [
+            "Majority\ngenotype",
+            "Explicit LD\n(top-8)",
+            "Explicit LD\n(all partners)",
+            "LDAttention",
+            "LDAttention\n+Bias",
+        ]
         means = [
-            small.get("explicit_ld", (np.nan, 0))[0],
+            small.get("majority", (np.nan, 0))[0],
+            small.get("explicit_top8", (np.nan, 0))[0],
+            small.get("explicit_all", (np.nan, 0))[0],
             small.get("no_bias", (np.nan, 0))[0],
             small.get("both", (np.nan, 0))[0],
         ]
         stds = [
-            small.get("explicit_ld", (np.nan, 0))[1],
+            small.get("majority", (np.nan, 0))[1],
+            small.get("explicit_top8", (np.nan, 0))[1],
+            small.get("explicit_all", (np.nan, 0))[1],
             small.get("no_bias", (np.nan, 0))[1],
             small.get("both", (np.nan, 0))[1],
         ]
-        colors = [GOLD, GREY, BLUE]
-        bars = ax.bar(labels, means, yerr=stds, capsize=4, color=colors, edgecolor="white", width=0.62)
-        _annotate_bars(ax, bars, means, stds)
-        vs_tf = means[2] - means[1]
-        vs_ld = means[2] - means[0]
-        ax.text(
-            0.5, 0.04,
-            f"{100 * vs_tf:+.1f} pts vs transformer   ·   {100 * vs_ld:+.1f} pts vs explicit LD",
-            transform=ax.transAxes, ha="center", fontsize=10, fontweight="bold", color=BLUE,
-        )
-        ax.set_ylim(0.70, 1.08)
-        ax.set_ylabel("Held-out imputation accuracy")
-        ax.set_title(f"B.  Edge over a plain transformer  ({small_n} people)")
+        _bars(ax, labels, means, stds, colors, f"B.  Sample efficiency  ({small_n} people)")
     else:
         ax.axis("off")
 
@@ -276,54 +299,63 @@ def fig_head_to_head() -> Path:
 def fig_robustness() -> Path:
     data = load_summary()
     both = data[("ablation", "both")]
+    no_bias = data[("ablation", "no_bias")]
     sweep = load_sweep()
     strong = load_strong_baseline().get(("ablation", "both", eval_rate()), {})
 
-    fig, axes = plt.subplots(1, 2, figsize=(10.8, 4.4))
+    fig, axes = plt.subplots(1, 2, figsize=(12.0, 4.6))
 
     ax = axes[0]
     if sweep:
         rates = sorted(sweep)
         for key, label, color, marker in (
-            ("model", "ldAttention", BLUE, "o"),
-            ("explicit_ld", "Explicit LD", GOLD, "s"),
-            ("majority", "Majority genotype", GREY, "^"),
+            ("model", "LDAttention+Bias", BLUE, "o"),
+            ("ldattention", "LDAttention", SLATE, "s"),
+            ("explicit_all", "Explicit LD (all partners)", GOLD, "^"),
+            ("explicit_top8", "Explicit LD (top-8)", GOLD_LIGHT, "v"),
+            ("majority", "Majority genotype", MAJORITY, "D"),
         ):
+            if key not in sweep[rates[0]]:
+                continue
             m = np.array([sweep[r][key][0] for r in rates])
             s = np.array([sweep[r][key][1] for r in rates])
             ax.plot(rates, m, marker=marker, color=color, lw=2.2, ms=7, label=label)
             ax.fill_between(rates, m - s, m + s, color=color, alpha=0.14, lw=0)
         ax.set_xlabel("Fraction of genotypes hidden")
-        ax.set_ylabel("Held-out imputation accuracy")
+        ax.set_ylabel("Held-out genotype accuracy")
         ax.set_title("A.  Holds as missingness increases")
-        ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd")
+        ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd", fontsize=8.5)
         ax.set_ylim(0.55, 1.02)
 
     ax = axes[1]
     bins = ["low", "mid", "high"]
     bin_labels = ["MAF 5–10%", "MAF 10–25%", "MAF >25%"]
-    width = 0.26
+    width = 0.16
     x = np.arange(len(bins))
     series = (
-        ("ldAttention", "accuracy_maf_", BLUE, False),
-        ("Explicit LD", "baseline_explicit_ld_accuracy_maf_", GOLD, True),
-        ("Majority", "baseline_majority_accuracy_maf_", GREY, False),
+        ("LDAttention+Bias", BLUE, [both.get(f"accuracy_maf_{b}", np.nan) for b in bins],
+         [both.get(f"accuracy_maf_{b}_std", 0.0) for b in bins]),
+        ("LDAttention", SLATE, [no_bias.get(f"accuracy_maf_{b}", np.nan) for b in bins],
+         [no_bias.get(f"accuracy_maf_{b}_std", 0.0) for b in bins]),
+        ("Explicit LD (all partners)", GOLD,
+         [strong.get(f"accuracy_maf_{b}", np.nan) for b in bins],
+         [strong.get(f"accuracy_maf_{b}_std", 0.0) for b in bins]),
+        ("Explicit LD (top-8)", GOLD_LIGHT,
+         [both.get(f"baseline_explicit_ld_accuracy_maf_{b}", np.nan) for b in bins],
+         [both.get(f"baseline_explicit_ld_accuracy_maf_{b}_std", 0.0) for b in bins]),
+        ("Majority", MAJORITY,
+         [both.get(f"baseline_majority_accuracy_maf_{b}", np.nan) for b in bins],
+         [both.get(f"baseline_majority_accuracy_maf_{b}_std", 0.0) for b in bins]),
     )
-    for i, (label, prefix, color, use_strong) in enumerate(series):
-        if use_strong and strong:
-            vals = [strong.get(f"accuracy_maf_{b}", np.nan) for b in bins]
-            errs = [strong.get(f"accuracy_maf_{b}_std", 0.0) for b in bins]
-        else:
-            vals = [both.get(f"{prefix}{b}", np.nan) for b in bins]
-            errs = [both.get(f"{prefix}{b}_std", 0.0) for b in bins]
-        ax.bar(x + (i - 1) * width, vals, width, yerr=errs, capsize=3, color=color,
+    for i, (label, color, vals, errs) in enumerate(series):
+        ax.bar(x + (i - 2) * width, vals, width, yerr=errs, capsize=2.5, color=color,
                edgecolor="white", label=label)
     ax.set_xticks(x)
     ax.set_xticklabels(bin_labels)
-    ax.set_ylabel("Held-out imputation accuracy")
+    ax.set_ylabel("Held-out genotype accuracy")
     ax.set_title("B.  Rare and common variants")
-    ax.set_ylim(0.40, 1.08)
-    ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd")
+    ax.set_ylim(0.40, 1.12)
+    ax.legend(frameon=True, fancybox=False, edgecolor="#dddddd", fontsize=8.0, loc="lower left")
 
     fig.tight_layout()
     out = OUT / "robustness.png"
