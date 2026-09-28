@@ -154,15 +154,15 @@ article once it is available.** Until then, cite this software release
   author       = {Abdelwahab, Omar and Torkamaneh, Davoud},
   year         = {2026},
   version      = {0.1.0},
-  url          = {https://github.com/Omar-Abd-Elwahab/ldAttention},
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.23023658},
+  url          = {https://doi.org/10.5281/zenodo.23023658},
   note         = {MIT License. Manuscript forthcoming.}
 }
 ```
 
-A **Zenodo DOI** is minted automatically from the GitHub release archive once
-Zenodo’s GitHub integration is enabled for this repository (metadata in
-[`.zenodo.json`](.zenodo.json)). After the first archived release, replace the
-`note` above with the version DOI from the Zenodo record.
+Archived release: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23023658.svg)](https://doi.org/10.5281/zenodo.23023658)
+([concept DOI](https://doi.org/10.5281/zenodo.23023657) resolves to the latest version).
 
 ---
 
